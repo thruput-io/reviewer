@@ -1,0 +1,131 @@
+#!/usr/bin/env bash
+set -e
+
+# ==============================================================================
+# Helper Script: review-pr
+# Automated Pull Request Review with agy & Azure DevOps MCP
+# ==============================================================================
+
+PR_ID=""
+PROJECT="${AZURE_DEVOPS_PROJECT:-${ado_mcp_project:-}}"
+REPO=""
+POST_COMMENTS=false
+NON_INTERACTIVE=false
+EXTRA_INSTRUCTIONS=""
+
+show_help() {
+    echo "Usage: review-pr <PR_ID> [options]"
+    echo ""
+    echo "Arguments:"
+    echo "  <PR_ID>                 Azure DevOps Pull Request ID to review (required)"
+    echo ""
+    echo "Options:"
+    echo "  -p, --project <name>    Azure DevOps Project name (default: \$AZURE_DEVOPS_PROJECT)"
+    echo "  -r, --repo <name>       Azure DevOps Repository name"
+    echo "  --post-comments         Allow the agent to post review comments directly to the PR threads"
+    echo "  --non-interactive, -n   Execute headlessly and print results to stdout (CI/CD mode)"
+    echo "  -i, --instructions <tx> Extra instructions or focus areas for the review"
+    echo "  -h, --help              Show this help message"
+    echo ""
+    echo "Example:"
+    echo "  review-pr 1042 --project CoreBanking --post-comments"
+    echo "  review-pr 1042 -n"
+}
+
+if [ "$#" -eq 0 ]; then
+    show_help
+    exit 1
+fi
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        -p|--project)
+            PROJECT="$2"
+            shift 2
+            ;;
+        -r|--repo)
+            REPO="$2"
+            shift 2
+            ;;
+        --post-comments)
+            POST_COMMENTS=true
+            shift
+            ;;
+        -n|--non-interactive)
+            NON_INTERACTIVE=true
+            shift
+            ;;
+        -i|--instructions)
+            EXTRA_INSTRUCTIONS="$2"
+            shift 2
+            ;;
+        *)
+            if [ -z "$PR_ID" ]; then
+                PR_ID="$1"
+                shift
+            else
+                echo "Unknown option or argument: $1" >&2
+                show_help
+                exit 1
+            fi
+            ;;
+    esac
+done
+
+if [ -z "$PR_ID" ]; then
+    echo "Error: Pull Request ID is required." >&2
+    exit 1
+fi
+
+# Build review prompt for agy
+PROMPT="Review Azure DevOps Pull Request #${PR_ID}."
+if [ -n "$PROJECT" ]; then
+    PROMPT="${PROMPT} Project: '${PROJECT}'."
+fi
+if [ -n "$REPO" ]; then
+    PROMPT="${PROMPT} Repository: '${REPO}'."
+fi
+
+PROMPT="${PROMPT}
+
+Follow these review steps:
+1. Fetch the pull request metadata, description, source/target branches, and linked work items using the Azure DevOps MCP tools.
+2. Inspect the diff and all modified files using Azure DevOps and Git tools.
+3. Review existing discussion threads to understand current review state.
+4. Perform a thorough, constructive code review checking:
+   - Correctness, logic flaws, race conditions, and edge cases.
+   - Security vulnerabilities (injection, auth, data leakage).
+   - Performance, resource leaks, and scalability.
+   - Code style, readability, error handling, and test coverage.
+5. Provide a clear summary with:
+   - Summary of changes
+   - Major concerns / blockers (if any)
+   - Suggestions & positive highlights"
+
+if [ "$POST_COMMENTS" = true ]; then
+    PROMPT="${PROMPT}
+6. Post constructive review comments and suggestions directly to the PR threads using Azure DevOps MCP tools where actionable."
+else
+    PROMPT="${PROMPT}
+6. Output your complete review report to the user without submitting remote PR comments (dry-run mode)."
+fi
+
+if [ -n "$EXTRA_INSTRUCTIONS" ]; then
+    PROMPT="${PROMPT}
+
+Additional Focus / Instructions from User:
+${EXTRA_INSTRUCTIONS}"
+fi
+
+# Execute agy
+if [ "$NON_INTERACTIVE" = true ]; then
+    echo "🔍 Running autonomous PR review for #${PR_ID}..."
+    agy -p "$PROMPT" --dangerously-skip-permissions
+else
+    echo "🚀 Starting interactive PR review session for #${PR_ID}..."
+    agy -p "$PROMPT"
+fi

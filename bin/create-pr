@@ -1,0 +1,143 @@
+#!/usr/bin/env bash
+set -e
+
+# ==============================================================================
+# Helper Script: create-pr
+# Automated Pull Request Creation with agy & Azure DevOps MCP
+# ==============================================================================
+
+TITLE=""
+DESCRIPTION=""
+TARGET_BRANCH="main"
+SOURCE_BRANCH=""
+WORK_ITEM=""
+PROJECT="${AZURE_DEVOPS_PROJECT:-${ado_mcp_project:-}}"
+REPO=""
+DRAFT=false
+NON_INTERACTIVE=false
+
+show_help() {
+    echo "Usage: create-pr [options]"
+    echo ""
+    echo "Options:"
+    echo "  -t, --title <title>          PR title (agent will suggest one if omitted)"
+    echo "  -d, --description <desc>     PR description/body (agent will generate if omitted)"
+    echo "  --target <branch>            Target branch into which changes merge (default: main)"
+    echo "  --source <branch>            Source branch with changes (default: current git branch)"
+    echo "  -w, --work-item <id>         Work item ID to link with the PR"
+    echo "  -p, --project <name>         Azure DevOps Project name (default: \$AZURE_DEVOPS_PROJECT)"
+    echo "  -r, --repo <name>            Azure DevOps Repository name"
+    echo "  --draft                      Create PR as Draft / Work In Progress"
+    echo "  -n, --non-interactive        Execute autonomously without interactive prompts"
+    echo "  -h, --help                   Show this help message"
+    echo ""
+    echo "Example:"
+    echo "  create-pr --title 'feat: add user authentication' --target main -w 4589"
+    echo "  create-pr -n"
+}
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        -t|--title)
+            TITLE="$2"
+            shift 2
+            ;;
+        -d|--description)
+            DESCRIPTION="$2"
+            shift 2
+            ;;
+        --target)
+            TARGET_BRANCH="$2"
+            shift 2
+            ;;
+        --source)
+            SOURCE_BRANCH="$2"
+            shift 2
+            ;;
+        -w|--work-item)
+            WORK_ITEM="$2"
+            shift 2
+            ;;
+        -p|--project)
+            PROJECT="$2"
+            shift 2
+            ;;
+        -r|--repo)
+            REPO="$2"
+            shift 2
+            ;;
+        --draft)
+            DRAFT=true
+            shift
+            ;;
+        -n|--non-interactive)
+            NON_INTERACTIVE=true
+            shift
+            ;;
+        *)
+            echo "Unknown option: $1" >&2
+            show_help
+            exit 1
+            ;;
+    esac
+done
+
+# If source branch is not specified, detect from current git repo
+if [ -z "$SOURCE_BRANCH" ]; then
+    if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        SOURCE_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+    fi
+fi
+
+# Build creation prompt for agy
+PROMPT="Create an Azure DevOps Pull Request."
+if [ -n "$PROJECT" ]; then
+    PROMPT="${PROMPT} Project: '${PROJECT}'."
+fi
+if [ -n "$REPO" ]; then
+    PROMPT="${PROMPT} Repository: '${REPO}'."
+fi
+if [ -n "$SOURCE_BRANCH" ]; then
+    PROMPT="${PROMPT} Source branch: '${SOURCE_BRANCH}'."
+fi
+PROMPT="${PROMPT} Target branch: '${TARGET_BRANCH}'."
+
+if [ -n "$TITLE" ]; then
+    PROMPT="${PROMPT} PR Title: '${TITLE}'."
+fi
+if [ -n "$DESCRIPTION" ]; then
+    PROMPT="${PROMPT} Initial description notes: '${DESCRIPTION}'."
+fi
+if [ -n "$WORK_ITEM" ]; then
+    PROMPT="${PROMPT} Link to Work Item ID: #${WORK_ITEM}."
+fi
+if [ "$DRAFT" = true ]; then
+    PROMPT="${PROMPT} Mark as Draft: true."
+fi
+
+PROMPT="${PROMPT}
+
+Workflow:
+1. Examine git status, commits, and diff between '${SOURCE_BRANCH:-current branch}' and '${TARGET_BRANCH}'.
+2. If work item #${WORK_ITEM} is specified, inspect the work item details for context and acceptance criteria.
+3. Draft a high quality PR description with:
+   - Summary of changes
+   - Motivation and context
+   - Testing completed
+   - Checklists
+4. Use Azure DevOps MCP tools to create the pull request.
+5. If a work item ID is provided, link the newly created PR to the work item.
+6. Return the URL and ID of the newly created Pull Request."
+
+# Execute agy
+if [ "$NON_INTERACTIVE" = true ]; then
+    echo "🚀 Creating PR autonomously..."
+    agy -p "$PROMPT" --dangerously-skip-permissions
+else
+    echo "🚀 Launching interactive PR creation session..."
+    agy -p "$PROMPT"
+fi

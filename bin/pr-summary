@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+set -e
+
+# ==============================================================================
+# Helper Script: pr-summary
+# Generate PR description / summary from local git changes or commit range
+# ==============================================================================
+
+BASE_BRANCH="main"
+FORMAT="markdown"
+
+show_help() {
+    echo "Usage: pr-summary [options]"
+    echo ""
+    echo "Options:"
+    echo "  -b, --base <branch>   Base branch to compare against (default: main)"
+    echo "  -h, --help            Show this help message"
+    echo ""
+    echo "Example:"
+    echo "  pr-summary --base main"
+}
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        -b|--base)
+            BASE_BRANCH="$2"
+            shift 2
+            ;;
+        *)
+            echo "Unknown option: $1" >&2
+            show_help
+            exit 1
+            ;;
+    esac
+done
+
+PROMPT="Generate a comprehensive pull request summary by comparing the current git branch against '${BASE_BRANCH}'.
+1. Inspect the git diff and recent commits using git MCP or local commands.
+2. Outline:
+   - High-level purpose and summary of changes
+   - Detailed list of modified components / modules
+   - Key architectural or behavioural changes
+   - Risk assessment and suggested test cases
+3. Format as clean GitHub-flavored Markdown ready to paste into an Azure DevOps PR description."
+
+agy -p "$PROMPT" --dangerously-skip-permissions

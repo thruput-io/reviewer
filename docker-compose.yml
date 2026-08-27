@@ -1,0 +1,20 @@
+services:
+  agy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: agy-azuredevops:latest
+    container_name: agy-ado-agent
+    env_file:
+      - .env
+    volumes:
+      # Mount current workspace or local repository
+      - ./:/workspace
+      # Optional: persist agy history and cache across container restarts
+      - agy-home:/home/agyuser
+    working_dir: /workspace
+    stdin_open: true
+    tty: true
+
+volumes:
+  agy-home:
