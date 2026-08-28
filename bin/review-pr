@@ -3,12 +3,13 @@ set -e
 
 # ==============================================================================
 # Helper Script: review-pr
-# Automated Pull Request Review with agy & Azure DevOps MCP
+# Automated Pull Request Review with agy & PR Review Skill
 # ==============================================================================
 
 PR_ID=""
 PROJECT="${AZURE_DEVOPS_PROJECT:-${ado_mcp_project:-}}"
 REPO=""
+SKILL_NAME="${PR_REVIEW_SKILL:-pr-review}"
 POST_COMMENTS=false
 NON_INTERACTIVE=false
 EXTRA_INSTRUCTIONS=""
@@ -22,6 +23,7 @@ show_help() {
     echo "Options:"
     echo "  -p, --project <name>    Azure DevOps Project name (default: \$AZURE_DEVOPS_PROJECT)"
     echo "  -r, --repo <name>       Azure DevOps Repository name"
+    echo "  -s, --skill <name>      Skill name to use (default: pr-review or \$PR_REVIEW_SKILL)"
     echo "  --post-comments         Allow the agent to post review comments directly to the PR threads"
     echo "  --non-interactive, -n   Execute headlessly and print results to stdout (CI/CD mode)"
     echo "  -i, --instructions <tx> Extra instructions or focus areas for the review"
@@ -49,6 +51,10 @@ while [ "$#" -gt 0 ]; do
             ;;
         -r|--repo)
             REPO="$2"
+            shift 2
+            ;;
+        -s|--skill)
+            SKILL_NAME="$2"
             shift 2
             ;;
         --post-comments)
@@ -81,8 +87,9 @@ if [ -z "$PR_ID" ]; then
     exit 1
 fi
 
-# Build review prompt for agy
-PROMPT="Review Azure DevOps Pull Request #${PR_ID}."
+# Build prompt delegating directly to the PR review skill
+PROMPT="Use the '${SKILL_NAME}' skill to review Azure DevOps Pull Request #${PR_ID}."
+
 if [ -n "$PROJECT" ]; then
     PROMPT="${PROMPT} Project: '${PROJECT}'."
 fi
@@ -90,42 +97,24 @@ if [ -n "$REPO" ]; then
     PROMPT="${PROMPT} Repository: '${REPO}'."
 fi
 
-PROMPT="${PROMPT}
-
-Follow these review steps:
-1. Fetch the pull request metadata, description, source/target branches, and linked work items using the Azure DevOps MCP tools.
-2. Inspect the diff and all modified files using Azure DevOps and Git tools.
-3. Review existing discussion threads to understand current review state.
-4. Perform a thorough, constructive code review checking:
-   - Correctness, logic flaws, race conditions, and edge cases.
-   - Security vulnerabilities (injection, auth, data leakage).
-   - Performance, resource leaks, and scalability.
-   - Code style, readability, error handling, and test coverage.
-5. Provide a clear summary with:
-   - Summary of changes
-   - Major concerns / blockers (if any)
-   - Suggestions & positive highlights"
-
 if [ "$POST_COMMENTS" = true ]; then
-    PROMPT="${PROMPT}
-6. Post constructive review comments and suggestions directly to the PR threads using Azure DevOps MCP tools where actionable."
+    PROMPT="${PROMPT} Mode: Submit review comments to PR threads using Azure DevOps MCP tools."
 else
-    PROMPT="${PROMPT}
-6. Output your complete review report to the user without submitting remote PR comments (dry-run mode)."
+    PROMPT="${PROMPT} Mode: Dry-run. Output your complete review report to the user without submitting remote PR comments."
 fi
 
 if [ -n "$EXTRA_INSTRUCTIONS" ]; then
     PROMPT="${PROMPT}
 
-Additional Focus / Instructions from User:
+Additional Instructions:
 ${EXTRA_INSTRUCTIONS}"
 fi
 
 # Execute agy
 if [ "$NON_INTERACTIVE" = true ]; then
-    echo "🔍 Running autonomous PR review for #${PR_ID}..."
+    echo "🔍 Running autonomous PR review for #${PR_ID} using '${SKILL_NAME}' skill..."
     agy -p "$PROMPT" --dangerously-skip-permissions
 else
-    echo "🚀 Starting interactive PR review session for #${PR_ID}..."
+    echo "🚀 Starting interactive PR review session for #${PR_ID} using '${SKILL_NAME}' skill..."
     agy -p "$PROMPT"
 fi

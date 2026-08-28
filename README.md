@@ -146,11 +146,20 @@ The image bundles pre-configured scripts inside `/usr/local/bin`:
 
 #### A. Review a Pull Request (`review-pr`)
 ```bash
-# Dry run review on stdout
-docker run --rm --env-file .env -v "$(pwd):/workspace" agy-azuredevops:latest review-pr 1042
+# Dry run review on stdout using default mounted pr-review skill
+docker run --rm --env-file .env \
+  -v "$(pwd):/workspace" \
+  -v "/path/to/my-pr-skill:/home/agyuser/.gemini/config/skills/pr-review:ro" \
+  agy-azuredevops:latest review-pr 1042
 
 # Autonomous review with comment posting enabled
-docker run --rm --env-file .env -v "$(pwd):/workspace" agy-azuredevops:latest review-pr 1042 --post-comments -n
+docker run --rm --env-file .env \
+  -v "$(pwd):/workspace" \
+  -v "/path/to/my-pr-skill:/home/agyuser/.gemini/config/skills/pr-review:ro" \
+  agy-azuredevops:latest review-pr 1042 --post-comments -n
+
+# Use a custom skill name
+docker run --rm --env-file .env -v "$(pwd):/workspace" agy-azuredevops:latest review-pr 1042 --skill custom-review
 ```
 
 #### B. Create a Pull Request (`create-pr`)
@@ -194,6 +203,7 @@ steps:
       -e AZURE_DEVOPS_PAT="$(System.AccessToken)" \
       -e AZURE_DEVOPS_PROJECT="$(System.TeamProject)" \
       -v "$(Build.SourcesDirectory):/workspace" \
+      -v "$(Build.SourcesDirectory)/.agents/skills/pr-review:/home/agyuser/.gemini/config/skills/pr-review:ro" \
       agy-azuredevops:latest \
       review-pr $(System.PullRequest.PullRequestId) --post-comments -n
   displayName: 'Antigravity Automated PR Review'
@@ -204,16 +214,27 @@ steps:
 
 ---
 
-## 🎯 Customizing Rules & Skills
+## 🎯 Mounting External Skills & Rules
 
-The image copies standard review guidelines into `~/.gemini/config/rules/`.
+You can keep your skills, runbooks, and rules in an external repository and mount them into the container:
 
-You can also mount your repository-specific rules and skills at runtime:
+### 1. Mounting a PR Review Skill
 ```bash
 docker run -it --rm \
   --env-file .env \
   -v "$(pwd):/workspace" \
-  -v "$(pwd)/.agents:/home/agyuser/.gemini/config/agents" \
+  -v "/path/to/my-pr-skill-repo:/home/agyuser/.gemini/config/skills/pr-review:ro" \
   agy-azuredevops:latest
 ```
-Any `.agents/rules/*.md` files located in your repo root will be automatically recognized and applied by `agy`.
+
+### 2. Mounting a Multi-Skill Repository
+```bash
+docker run -it --rm \
+  --env-file .env \
+  -v "$(pwd):/workspace" \
+  -v "/path/to/company-skills/skills:/home/agyuser/.gemini/config/skills:ro" \
+  agy-azuredevops:latest
+```
+
+### 3. Mounting Workspace Customizations
+Any `.agents/skills/` or `.agents/rules/` directory inside your target repository will be automatically discovered by `agy`.

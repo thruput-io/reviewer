@@ -145,10 +145,15 @@ with open(config_path, 'w') as f:
     json.dump(config_data, f, indent=2)
 EOF
 
-# 6. Copy Rules if available and not present in workspace
+# 6. Copy Rules and Skills if available
+mkdir -p "${CONFIG_DIR}/rules" "${CONFIG_DIR}/skills"
+
 if [ -d "/etc/antigravity/rules" ]; then
-    mkdir -p "${CONFIG_DIR}/rules"
     cp -u /etc/antigravity/rules/* "${CONFIG_DIR}/rules/" 2>/dev/null || true
+fi
+
+if [ -d "/etc/antigravity/skills" ]; then
+    cp -ru /etc/antigravity/skills/* "${CONFIG_DIR}/skills/" 2>/dev/null || true
 fi
 
 # 7. Print Status Banner if Interactive or Informational

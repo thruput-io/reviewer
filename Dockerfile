@@ -54,12 +54,11 @@ RUN if id node >/dev/null 2>&1; then \
     && mkdir -p ${AGY_HOME}/.config \
     && chown -R agyuser:agyuser ${AGY_HOME} ${WORKSPACE_DIR}
 
-# Copy scripts and rules
+# Copy scripts
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY bin/review-pr /usr/local/bin/review-pr
 COPY bin/create-pr /usr/local/bin/create-pr
 COPY bin/pr-summary /usr/local/bin/pr-summary
-COPY rules/ /etc/antigravity/rules/
 
 # Make all custom binaries executable
 RUN chmod +x /usr/local/bin/entrypoint.sh \
