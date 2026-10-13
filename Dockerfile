@@ -45,16 +45,15 @@ RUN if id node >/dev/null 2>&1; then \
         useradd -u 1000 -g agyuser -m -s /bin/bash agyuser; \
     fi \
     && mkdir -p ${WORKSPACE_DIR} \
-    && mkdir -p ${AGY_HOME}/.gemini/config \
+    && mkdir -p ${AGY_HOME}/.gemini/config/skills \
     && mkdir -p ${AGY_HOME}/.gemini/antigravity-cli \
     && mkdir -p ${AGY_HOME}/.config \
+    && echo '{"modelProvider":"gemini","permissions":{"allow":["read_file(*)","view_file(*)","list_directory(*)","file_search(*)","grep_search(*)","run_command(*)"]}}' > ${AGY_HOME}/.gemini/antigravity-cli/settings.json \
     && chown -R agyuser:agyuser ${AGY_HOME} ${WORKSPACE_DIR}
 
-COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY bin/review-pr /usr/local/bin/review-pr
 
-RUN chmod +x /usr/local/bin/entrypoint.sh \
-    /usr/local/bin/review-pr
+RUN chmod +x /usr/local/bin/review-pr
 
 WORKDIR ${WORKSPACE_DIR}
 
@@ -62,8 +61,6 @@ USER agyuser
 
 # Install pr-review skill via agentplugins and ensure agy discovery paths are linked
 RUN npx --yes @agentplugins/cli add thruput-io/agents \
-    && mkdir -p ${AGY_HOME}/.gemini/config/skills \
     && cp -ru ${AGY_HOME}/.agents/skills/* ${AGY_HOME}/.gemini/config/skills/ 2>/dev/null || true
 
-ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
-CMD ["review-pr"]
+ENTRYPOINT ["/usr/local/bin/review-pr"]

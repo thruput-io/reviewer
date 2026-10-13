@@ -19,7 +19,6 @@ jobs:
       - name: Validate shell script syntax
         run: |
           bash -n bin/review-pr
-          bash -n entrypoint.sh
 
   build-test:
     name: Test Docker Build

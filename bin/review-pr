@@ -2,9 +2,49 @@
 set -e
 
 # ==============================================================================
-# Helper Script: review-pr
-# Automated Pull Request Review with agy & Azure DevOps MCP
+# Azure DevOps PR Reviewer
 # ==============================================================================
+
+# Allow direct command execution (e.g. `docker run reviewer bash`)
+if [ "$1" = "bash" ] || [ "$1" = "sh" ] || [ "$1" = "agy" ]; then
+    exec "$@"
+fi
+
+# Environment & Git setup
+export HOME="${HOME:-/home/agyuser}"
+export WORKSPACE_DIR="${WORKSPACE_DIR:-/workspace}"
+git config --global --add safe.directory "*" || true
+
+# Ensure settings.json with default tool permissions exists
+SETTINGS_FILE="${HOME}/.gemini/antigravity-cli/settings.json"
+if [ ! -f "$SETTINGS_FILE" ]; then
+    mkdir -p "${HOME}/.gemini/antigravity-cli"
+    cat <<'EOF' > "$SETTINGS_FILE"
+{
+  "modelProvider": "gemini",
+  "permissions": {
+    "allow": [
+      "read_file(*)",
+      "view_file(*)",
+      "list_directory(*)",
+      "file_search(*)",
+      "grep_search(*)",
+      "run_command(*)"
+    ]
+  }
+}
+EOF
+fi
+
+# Copy any externally mounted rules or skills
+if [ -d "/etc/antigravity/rules" ]; then
+    mkdir -p "${HOME}/.gemini/config/rules"
+    cp -u /etc/antigravity/rules/* "${HOME}/.gemini/config/rules/" 2>/dev/null || true
+fi
+if [ -d "/etc/antigravity/skills" ]; then
+    mkdir -p "${HOME}/.gemini/config/skills"
+    cp -ru /etc/antigravity/skills/* "${HOME}/.gemini/config/skills/" 2>/dev/null || true
+fi
 
 # Extract PR URL from arguments
 PR_URL=""
@@ -89,10 +129,5 @@ else
     PROMPT="$PROMPT Output your review report to stdout without posting comments."
 fi
 
-# Auto-detect non-interactive mode if no terminal is attached
-EXTRA_ARGS=()
-if [ ! -t 0 ] || [[ "$*" == *"-n"* ]] || [[ "$*" == *"--non-interactive"* ]]; then
-    EXTRA_ARGS+=("--dangerously-skip-permissions")
-fi
-
-exec agy -p "$PROMPT" "${EXTRA_ARGS[@]}"
+# Execute agy with auto-approved permissions for non-interactive review
+exec agy -p "$PROMPT" --dangerously-skip-permissions
