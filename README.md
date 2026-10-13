@@ -2,9 +2,9 @@
 
 A purpose-built container combining Google's **Antigravity CLI (`agy`)**, the **Official Microsoft Azure DevOps MCP Server** (`@azure-devops/mcp`), and the **Git MCP Server** (`mcp-server-git`) to perform automated and interactive pull request reviews in Azure DevOps.
 
-- 🔍 **Automated PR Reviews**: Deep code diff analysis, vulnerability scanning, and review summaries.
+- 🔍 **Automated PR Reviews**: Deep code diff analysis, vulnerability scanning, and review reports.
 - 💬 **Thread Comments**: Optionally post actionable review feedback directly to PR threads.
-- 🎯 **PR ID as Default Argument**: Pass the PR ID directly (e.g. `podman run reviewer 1042`).
+- 🔗 **Zero Configuration from URL**: Pass the full Azure DevOps PR URL — organization, project, repository, and PR ID are automatically extracted.
 - ⚡ **TTY Auto-Detection**: Automatically runs headlessly in CI/CD without pseudo-terminal errors.
 
 ---
@@ -15,8 +15,6 @@ A purpose-built container combining Google's **Antigravity CLI (`agy`)**, the **
 3. [Quick Start](#-quick-start)
 4. [Environment Variables Reference](#-environment-variables-reference)
 5. [Usage](#-usage)
-   - [CLI / Docker Examples](#cli--docker-examples)
-   - [Auto-detection of Non-Interactive Mode](#auto-detection-of-non-interactive-mode)
 6. [Azure DevOps Pipeline Integration](#-azure-devops-pipeline-integration)
 7. [Customizing Review Skills & Rules](#-customizing-review-skills--rules)
 
@@ -58,89 +56,89 @@ A purpose-built container combining Google's **Antigravity CLI (`agy`)**, the **
 
 ## 🚀 Quick Start
 
-### 1. Configure Environment
-Create `.env`:
-```env
-GEMINI_API_KEY=your_gemini_api_key_here
-AZURE_DEVOPS_ORG=your-org-name
-AZURE_DEVOPS_PAT=your_pat_token_here
-AZURE_DEVOPS_PROJECT=YourProject
-```
-
-### 2. Build the Image
+### 1. Build the Image
 ```bash
 podman build -t reviewer .
 # or
 docker build -t reviewer .
 ```
 
-### 3. Review a PR
-Pass the PR ID directly as the argument:
+### 2. Review a Pull Request
+Pass the full PR URL directly as the argument:
 ```bash
-podman run --env-file .env reviewer 1042
+podman run --rm \
+  -e GEMINI_API_KEY="your-gemini-key" \
+  -e AZURE_DEVOPS_PAT="your-azure-pat" \
+  reviewer https://dev.azure.com/myorg/myproject/_git/myrepo/pullrequest/1042
 ```
 
 ---
 
 ## ⚙️ Environment Variables Reference
 
-| Variable | Description | Required | Default |
-| :--- | :--- | :---: | :--- |
-| `GEMINI_API_KEY` | Google Gemini API key | **Yes** | — |
-| `AZURE_DEVOPS_ORG` | Azure DevOps organization name or URL | **Yes** | — |
-| `AZURE_DEVOPS_PAT` | Personal Access Token for Azure DevOps | **Yes** | — |
-| `AZURE_DEVOPS_PROJECT`| Azure DevOps project name | Recommended | — |
-| `PR_ID` | Default Pull Request ID to review | No | — |
-| `PR_REVIEW_SKILL` | Review skill name to use | No | `pr-review` |
-| `AZURE_DEVOPS_DOMAINS`| Enabled MCP tool domains | No | `core,repositories,work-items,work,pipelines` |
-| `GIT_REPO_PATH` | Path to git repository in container | No | `/workspace` |
-| `AGY_MODEL` | Override LLM model (e.g., `gemini-2.5-pro`) | No | Default CLI model |
-| `AGY_VERBOSE` | Output verbose banner information on startup | No | `false` |
+Only **two** environment variables are required:
+
+| Variable | Description | Required |
+| :--- | :--- | :---: |
+| `GEMINI_API_KEY` | Google Gemini API key for Antigravity engine | **Yes** |
+| `AZURE_DEVOPS_PAT` | Personal Access Token for Azure DevOps MCP server | **Yes** |
+
+All other configurations (organization, project, repository, PR ID) are parsed directly from the PR URL argument.
 
 ---
 
 ## 💻 Usage
 
-`review-pr` is the default command. You can pass the PR ID and options directly to `podman run` or `docker run`:
+`review-pr` is the default container command. Pass the full PR URL and options directly to `podman run` or `docker run`:
 
 ### Dry-run Review (Prints to stdout)
 ```bash
-podman run --env-file .env reviewer 1042
+podman run --rm \
+  -e GEMINI_API_KEY="your-gemini-key" \
+  -e AZURE_DEVOPS_PAT="your-azure-pat" \
+  reviewer https://dev.azure.com/myorg/myproject/_git/myrepo/pullrequest/1042
 ```
 
 ### Post Comments to PR Threads
 ```bash
-podman run --env-file .env reviewer 1042 --post-comments
+podman run --rm \
+  -e GEMINI_API_KEY="your-gemini-key" \
+  -e AZURE_DEVOPS_PAT="your-azure-pat" \
+  reviewer https://dev.azure.com/myorg/myproject/_git/myrepo/pullrequest/1042 --post-comments
 ```
 
 ### Mount Workspace & Review
+Mount your local checkout to allow local diffing alongside the Azure DevOps MCP tools:
 ```bash
-podman run --rm --env-file .env \
+podman run --rm \
+  -e GEMINI_API_KEY="your-gemini-key" \
+  -e AZURE_DEVOPS_PAT="your-azure-pat" \
   -v "$(pwd):/workspace" \
-  reviewer 1042
+  reviewer https://dev.azure.com/myorg/myproject/_git/myrepo/pullrequest/1042
 ```
 
 ### Interactive Session
-If you want to converse interactively with the agent about the PR review, allocate a TTY with `-it`:
+To converse interactively with the reviewer agent, allocate a pseudo-TTY with `-it`:
 ```bash
-podman run -it --rm --env-file .env reviewer 1042
+podman run -it --rm \
+  -e GEMINI_API_KEY="your-gemini-key" \
+  -e AZURE_DEVOPS_PAT="your-azure-pat" \
+  reviewer https://dev.azure.com/myorg/myproject/_git/myrepo/pullrequest/1042
 ```
 
 ### Supported Arguments & Flags
 ```text
-review-pr [PR_ID] [options]
+review-pr <PR_URL> [options]
 
 Arguments:
-  [PR_ID]                 Azure DevOps Pull Request ID (or pass via PR_ID env var)
+  <PR_URL>                Full Azure DevOps Pull Request URL (required)
+                          e.g. https://dev.azure.com/org/project/_git/repo/pullrequest/1042
 
 Options:
-  -p, --project <name>    Azure DevOps Project name (default: $AZURE_DEVOPS_PROJECT)
-  -r, --repo <name>       Azure DevOps Repository name
-  -s, --skill <name>      Skill name to use (default: pr-review or $PR_REVIEW_SKILL)
-  --post-comments         Post review comments directly to the PR threads
+  --post-comments         Allow the agent to post review comments directly to PR threads
   -n, --non-interactive   Execute headlessly without prompts (auto-detected when no TTY)
   -i, --instructions <tx> Extra instructions or focus areas for the review
-  -h, --help              Show help message
+  -h, --help              Show this help message
 ```
 
 ---
@@ -166,13 +164,13 @@ steps:
   fetchDepth: 0
 
 - script: |
+    PR_URL="$(System.CollectionUri)$(System.TeamProject)/_git/$(Build.Repository.Name)/pullrequest/$(System.PullRequest.PullRequestId)"
+
     docker run --rm \
       -e GEMINI_API_KEY="$(GEMINI_API_KEY)" \
-      -e AZURE_DEVOPS_ORG="$(System.CollectionUri)" \
       -e AZURE_DEVOPS_PAT="$(System.AccessToken)" \
-      -e AZURE_DEVOPS_PROJECT="$(System.TeamProject)" \
       -v "$(Build.SourcesDirectory):/workspace" \
-      reviewer $(System.PullRequest.PullRequestId) --post-comments
+      reviewer "$PR_URL" --post-comments
   displayName: 'Antigravity Automated PR Review'
   env:
     GEMINI_API_KEY: $(GEMINI_API_KEY)
@@ -187,8 +185,9 @@ Mount custom review skills or rules into the container at runtime:
 
 ```bash
 podman run --rm \
-  --env-file .env \
+  -e GEMINI_API_KEY="your-gemini-key" \
+  -e AZURE_DEVOPS_PAT="your-azure-pat" \
   -v "$(pwd):/workspace" \
   -v "/path/to/my-pr-skill:/home/agyuser/.gemini/config/skills/pr-review:ro" \
-  reviewer 1042
+  reviewer https://dev.azure.com/myorg/myproject/_git/myrepo/pullrequest/1042
 ```

@@ -3,126 +3,75 @@ set -e
 
 # ==============================================================================
 # Helper Script: review-pr
-# Automated Pull Request Review with agy & PR Review Skill
+# Automated Pull Request Review with agy & Azure DevOps MCP
 # ==============================================================================
 
-PR_ID="${PR_ID:-${SYSTEM_PULLREQUEST_PULLREQUESTID:-}}"
-PROJECT="${AZURE_DEVOPS_PROJECT:-${ado_mcp_project:-}}"
-REPO=""
-SKILL_NAME="${PR_REVIEW_SKILL:-pr-review}"
-POST_COMMENTS=false
-NON_INTERACTIVE="${NON_INTERACTIVE:-false}"
-EXTRA_INSTRUCTIONS=""
-
-show_help() {
-    echo "Usage: review-pr [PR_ID] [options]"
-    echo ""
-    echo "Arguments:"
-    echo "  [PR_ID]                 Azure DevOps Pull Request ID to review (or set \$PR_ID / \$SYSTEM_PULLREQUEST_PULLREQUESTID)"
-    echo ""
-    echo "Options:"
-    echo "  -p, --project <name>    Azure DevOps Project name (default: \$AZURE_DEVOPS_PROJECT)"
-    echo "  -r, --repo <name>       Azure DevOps Repository name"
-    echo "  -s, --skill <name>      Skill name to use (default: pr-review or \$PR_REVIEW_SKILL)"
-    echo "  --post-comments         Allow the agent to post review comments directly to the PR threads"
-    echo "  -n, --non-interactive   Execute headlessly and print results to stdout (CI/CD mode)"
-    echo "  -i, --instructions <tx> Extra instructions or focus areas for the review"
-    echo "  -h, --help              Show this help message"
-    echo ""
-    echo "Examples:"
-    echo "  review-pr 1042"
-    echo "  review-pr 1042 --post-comments"
-    echo "  review-pr 1042 -n"
-    echo "  PR_ID=1042 review-pr"
-}
-
-if [ "$#" -eq 0 ] && [ -z "$PR_ID" ]; then
-    show_help
-    exit 1
-fi
-
-while [ "$#" -gt 0 ]; do
-    case "$1" in
-        -h|--help)
-            show_help
-            exit 0
-            ;;
-        -p|--project)
-            PROJECT="$2"
-            shift 2
-            ;;
-        -r|--repo)
-            REPO="$2"
-            shift 2
-            ;;
-        -s|--skill)
-            SKILL_NAME="$2"
-            shift 2
-            ;;
-        --post-comments)
-            POST_COMMENTS=true
-            shift
-            ;;
-        -n|--non-interactive)
-            NON_INTERACTIVE=true
-            shift
-            ;;
-        -i|--instructions)
-            EXTRA_INSTRUCTIONS="$2"
-            shift 2
-            ;;
-        *)
-            if [ -z "$PR_ID" ]; then
-                PR_ID="$1"
-                shift
-            else
-                echo "Unknown option or argument: $1" >&2
-                show_help
-                exit 1
-            fi
-            ;;
-    esac
+# Extract PR URL from arguments
+PR_URL=""
+for arg in "$@"; do
+    [[ "$arg" =~ ^https?:// ]] && PR_URL="$arg"
 done
 
-if [ -z "$PR_ID" ]; then
-    echo "Error: Pull Request ID is required." >&2
-    echo "Pass PR ID as an argument (e.g., 'review-pr 1042') or set the PR_ID environment variable." >&2
+if [ -z "$PR_URL" ]; then
+    echo "Usage: review-pr <PR_URL> [--post-comments]"
+    echo "Example: review-pr https://dev.azure.com/myorg/myproject/_git/myrepo/pullrequest/1042"
     exit 1
 fi
 
-# Build prompt delegating directly to the PR review skill
-PROMPT="Use the '${SKILL_NAME}' skill to review Azure DevOps Pull Request #${PR_ID}."
+# Validate credentials
+GEMINI_KEY="${GEMINI_API_KEY:-${GOOGLE_API_KEY:-}}"
+ADO_PAT="${AZURE_DEVOPS_PAT:-${ADO_MCP_AUTH_TOKEN:-${SYSTEM_ACCESSTOKEN:-}}}"
 
-if [ -n "$PROJECT" ]; then
-    PROMPT="${PROMPT} Project: '${PROJECT}'."
-fi
-if [ -n "$REPO" ]; then
-    PROMPT="${PROMPT} Repository: '${REPO}'."
+if [ -z "$GEMINI_KEY" ] || [ -z "$ADO_PAT" ]; then
+    echo "Error: GEMINI_API_KEY and AZURE_DEVOPS_PAT environment variables are required." >&2
+    exit 1
 fi
 
-if [ "$POST_COMMENTS" = true ]; then
-    PROMPT="${PROMPT} Mode: Submit review comments to PR threads using Azure DevOps MCP tools."
+export GEMINI_API_KEY="$GEMINI_KEY"
+export AZURE_DEVOPS_PAT="$ADO_PAT"
+
+# Extract organization from URL
+[[ "$PR_URL" =~ dev\.azure\.com/([^/]+) ]] && ORG="${BASH_REMATCH[1]}"
+[[ "$PR_URL" =~ ([^/.]+)\.visualstudio\.com ]] && ORG="${BASH_REMATCH[1]}"
+ORG="${AZURE_DEVOPS_ORG:-$ORG}"
+
+if [ -z "$ORG" ]; then
+    echo "Error: Could not determine Azure DevOps organization from PR URL: $PR_URL" >&2
+    exit 1
+fi
+
+# Write MCP configuration
+mkdir -p ~/.gemini/config
+cat <<EOF > ~/.gemini/config/mcp_config.json
+{
+  "mcpServers": {
+    "azure-devops": {
+      "command": "mcp-server-azuredevops",
+      "args": ["$ORG", "--authentication", "envvar", "-d", "repositories", "work-items", "core"],
+      "env": {
+        "ADO_MCP_AUTH_TOKEN": "$ADO_PAT"
+      }
+    },
+    "git": {
+      "command": "mcp-server-git",
+      "args": ["--repository", "${WORKSPACE_DIR:-/workspace}"]
+    }
+  }
+}
+EOF
+
+# Build review prompt
+PROMPT="Review Pull Request: $PR_URL."
+if [[ "$*" == *"--post-comments"* ]]; then
+    PROMPT="$PROMPT Post actionable review comments directly to the PR threads."
 else
-    PROMPT="${PROMPT} Mode: Dry-run. Output your complete review report to the user without submitting remote PR comments."
+    PROMPT="$PROMPT Output your review report to stdout without posting comments."
 fi
 
-if [ -n "$EXTRA_INSTRUCTIONS" ]; then
-    PROMPT="${PROMPT}
-
-Additional Instructions:
-${EXTRA_INSTRUCTIONS}"
+# Auto-detect non-interactive mode if no terminal is attached
+EXTRA_ARGS=()
+if [ ! -t 0 ] || [[ "$*" == *"-n"* ]] || [[ "$*" == *"--non-interactive"* ]]; then
+    EXTRA_ARGS+=("--dangerously-skip-permissions")
 fi
 
-# Auto-detect non-interactive mode if no terminal is attached (prevents TTY errors in containers)
-if [ "$NON_INTERACTIVE" = false ] && [ ! -t 0 ]; then
-    NON_INTERACTIVE=true
-fi
-
-# Execute agy
-if [ "$NON_INTERACTIVE" = true ]; then
-    echo "🔍 Running autonomous PR review for #${PR_ID} using '${SKILL_NAME}' skill..."
-    agy -p "$PROMPT" --dangerously-skip-permissions
-else
-    echo "🚀 Starting interactive PR review session for #${PR_ID} using '${SKILL_NAME}' skill..."
-    agy -p "$PROMPT"
-fi
+exec agy -p "$PROMPT" "${EXTRA_ARGS[@]}"
