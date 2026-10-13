@@ -1,12 +1,11 @@
-# Antigravity CLI (`agy`) Docker Image with Azure DevOps & Git MCP
+# Azure DevOps Pull Request Reviewer (`reviewer`)
 
-A production-ready Docker container combining Google's **Antigravity CLI (`agy`)**, the **Official Microsoft Azure DevOps MCP Server** (`@azure-devops/mcp`), and the **Git MCP Server** (`mcp-server-git`).
+A purpose-built container combining Google's **Antigravity CLI (`agy`)**, the **Official Microsoft Azure DevOps MCP Server** (`@azure-devops/mcp`), and the **Git MCP Server** (`mcp-server-git`) to perform automated and interactive pull request reviews in Azure DevOps.
 
-Engineered for autonomous and interactive code tasks in Azure DevOps environments:
-- 🔍 **Automated & Interactive PR Reviews**: Deep code diff analysis, vulnerability scanning, and threaded comment generation.
-- 🚀 **Smart PR Creation**: Semantic branch inspection, work item linking, and structured description drafting.
-- 🛠️ **Seamless Git & MCP Integration**: Both Azure DevOps remote tools and local Git tools exposed natively to `agy`.
-- ⚙️ **Fully Configurable via Environment Variables**: Zero hardcoded credentials or org settings.
+- 🔍 **Automated PR Reviews**: Deep code diff analysis, vulnerability scanning, and review summaries.
+- 💬 **Thread Comments**: Optionally post actionable review feedback directly to PR threads.
+- 🎯 **PR ID as Default Argument**: Pass the PR ID directly (e.g. `podman run reviewer 1042`).
+- ⚡ **TTY Auto-Detection**: Automatically runs headlessly in CI/CD without pseudo-terminal errors.
 
 ---
 
@@ -15,12 +14,11 @@ Engineered for autonomous and interactive code tasks in Azure DevOps environment
 2. [Prerequisites](#-prerequisites)
 3. [Quick Start](#-quick-start)
 4. [Environment Variables Reference](#-environment-variables-reference)
-5. [Usage Modes](#-usage-modes)
-   - [Interactive Terminal Mode](#1-interactive-terminal-mode)
-   - [Headless / CI/CD Mode](#2-headless--cicd-mode)
-   - [Built-in Helper Scripts](#3-built-in-helper-scripts)
+5. [Usage](#-usage)
+   - [CLI / Docker Examples](#cli--docker-examples)
+   - [Auto-detection of Non-Interactive Mode](#auto-detection-of-non-interactive-mode)
 6. [Azure DevOps Pipeline Integration](#-azure-devops-pipeline-integration)
-7. [Customizing Rules & Skills](#-customizing-rules--skills)
+7. [Customizing Review Skills & Rules](#-customizing-review-skills--rules)
 
 ---
 
@@ -46,32 +44,22 @@ Engineered for autonomous and interactive code tasks in Azure DevOps environment
        └────────────────────────┘                                  └───────────────────────┘
 ```
 
-When the container boots:
-1. `entrypoint.sh` reads your environment variables.
-2. It dynamically generates `~/.gemini/config/mcp_config.json` with configuration for both MCP servers.
-3. It configures `~/.gemini/antigravity-cli/settings.json` and git authentication/safe directories.
-4. It hands off execution to `agy` or your specified command/script.
-
 ---
 
 ## 🔑 Prerequisites
 
-- [Docker](https://docs.docker.com/get-docker/) installed.
+- [Podman](https://podman.io/) or [Docker](https://docs.docker.com/get-docker/) installed.
 - **Gemini API Key**: From [Google AI Studio](https://aistudio.google.com/) or Vertex AI.
 - **Azure DevOps Personal Access Token (PAT)**: With scopes:
-  - **Code**: `Read & Write`
-  - **Work Items**: `Read & Write` (if linking issues)
-  - **Pull Request Threads**: `Read & Write`
+  - **Code**: `Read` (or `Read & Write` to post comments)
+  - **Pull Request Threads**: `Read & Write` (if posting comments)
 
 ---
 
 ## 🚀 Quick Start
 
-### 1. Clone & Configure Environment
-```bash
-cp .env.example .env
-```
-Edit `.env` and fill in your credentials:
+### 1. Configure Environment
+Create `.env`:
 ```env
 GEMINI_API_KEY=your_gemini_api_key_here
 AZURE_DEVOPS_ORG=your-org-name
@@ -79,14 +67,17 @@ AZURE_DEVOPS_PAT=your_pat_token_here
 AZURE_DEVOPS_PROJECT=YourProject
 ```
 
-### 2. Build the Docker Image
+### 2. Build the Image
 ```bash
-docker build -t agy-azuredevops:latest .
+podman build -t reviewer .
+# or
+docker build -t reviewer .
 ```
 
-### 3. Run with Docker Compose
+### 3. Review a PR
+Pass the PR ID directly as the argument:
 ```bash
-docker compose run --rm agy
+podman run --env-file .env reviewer 1042
 ```
 
 ---
@@ -95,90 +86,68 @@ docker compose run --rm agy
 
 | Variable | Description | Required | Default |
 | :--- | :--- | :---: | :--- |
-| `GEMINI_API_KEY` | Google Gemini API key for Antigravity | **Yes** | — |
+| `GEMINI_API_KEY` | Google Gemini API key | **Yes** | — |
 | `AZURE_DEVOPS_ORG` | Azure DevOps organization name or URL | **Yes** | — |
 | `AZURE_DEVOPS_PAT` | Personal Access Token for Azure DevOps | **Yes** | — |
-| `AZURE_DEVOPS_PROJECT`| Default Azure DevOps project | Recommended | — |
-| `AZURE_DEVOPS_DOMAINS`| Enabled tool domains (`core,repositories,work-items,work,pipelines`) | No | All code domains |
-| `AZURE_DEVOPS_AUTH_METHOD` | Auth method for MCP server (`envvar`, `azcli`, `interactive`) | No | `envvar` |
-| `GIT_USER_NAME` | Git committer name | No | `Antigravity Agent` |
-| `GIT_USER_EMAIL` | Git committer email | No | `antigravity@example.com` |
-| `GIT_DEFAULT_BRANCH` | Default repository branch | No | `main` |
+| `AZURE_DEVOPS_PROJECT`| Azure DevOps project name | Recommended | — |
+| `PR_ID` | Default Pull Request ID to review | No | — |
+| `PR_REVIEW_SKILL` | Review skill name to use | No | `pr-review` |
+| `AZURE_DEVOPS_DOMAINS`| Enabled MCP tool domains | No | `core,repositories,work-items,work,pipelines` |
 | `GIT_REPO_PATH` | Path to git repository in container | No | `/workspace` |
 | `AGY_MODEL` | Override LLM model (e.g., `gemini-2.5-pro`) | No | Default CLI model |
 | `AGY_VERBOSE` | Output verbose banner information on startup | No | `false` |
 
 ---
 
-## 💻 Usage Modes
+## 💻 Usage
 
-### 1. Interactive Terminal Mode
-Run an interactive session directly inside a local repository:
+`review-pr` is the default command. You can pass the PR ID and options directly to `podman run` or `docker run`:
+
+### Dry-run Review (Prints to stdout)
 ```bash
-docker run -it --rm \
-  --env-file .env \
-  -v "$(pwd):/workspace" \
-  agy-azuredevops:latest
+podman run --env-file .env reviewer 1042
 ```
-Inside the interactive session, you can converse with `agy` using natural language:
+
+### Post Comments to PR Threads
+```bash
+podman run --env-file .env reviewer 1042 --post-comments
+```
+
+### Mount Workspace & Review
+```bash
+podman run --rm --env-file .env \
+  -v "$(pwd):/workspace" \
+  reviewer 1042
+```
+
+### Interactive Session
+If you want to converse interactively with the agent about the PR review, allocate a TTY with `-it`:
+```bash
+podman run -it --rm --env-file .env reviewer 1042
+```
+
+### Supported Arguments & Flags
 ```text
-agy> List active PRs in project CoreBanking
-agy> Review PR #142 and highlight potential security issues
-```
+review-pr [PR_ID] [options]
 
----
+Arguments:
+  [PR_ID]                 Azure DevOps Pull Request ID (or pass via PR_ID env var)
 
-### 2. Headless / CI/CD Mode
-Run one-shot automated tasks without interactive prompts:
-```bash
-docker run --rm \
-  --env-file .env \
-  -v "$(pwd):/workspace" \
-  agy-azuredevops:latest \
-  agy -p "Review Azure DevOps PR #1042 in project CoreBanking and print summary" --dangerously-skip-permissions
-```
-
----
-
-### 3. Built-in Helper Scripts
-
-The image bundles pre-configured scripts inside `/usr/local/bin`:
-
-#### A. Review a Pull Request (`review-pr`)
-```bash
-# Dry run review on stdout using default mounted pr-review skill
-docker run --rm --env-file .env \
-  -v "$(pwd):/workspace" \
-  -v "/path/to/my-pr-skill:/home/agyuser/.gemini/config/skills/pr-review:ro" \
-  agy-azuredevops:latest review-pr 1042
-
-# Autonomous review with comment posting enabled
-docker run --rm --env-file .env \
-  -v "$(pwd):/workspace" \
-  -v "/path/to/my-pr-skill:/home/agyuser/.gemini/config/skills/pr-review:ro" \
-  agy-azuredevops:latest review-pr 1042 --post-comments -n
-
-# Use a custom skill name
-docker run --rm --env-file .env -v "$(pwd):/workspace" agy-azuredevops:latest review-pr 1042 --skill custom-review
-```
-
-#### B. Create a Pull Request (`create-pr`)
-```bash
-# Create PR for current branch linked to work item #4589
-docker run --rm --env-file .env -v "$(pwd):/workspace" agy-azuredevops:latest create-pr --title "feat: implement caching" --target main -w 4589 -n
-```
-
-#### C. Generate PR Summary (`pr-summary`)
-```bash
-# Generate markdown summary comparing current branch against main
-docker run --rm --env-file .env -v "$(pwd):/workspace" agy-azuredevops:latest pr-summary --base main
+Options:
+  -p, --project <name>    Azure DevOps Project name (default: $AZURE_DEVOPS_PROJECT)
+  -r, --repo <name>       Azure DevOps Repository name
+  -s, --skill <name>      Skill name to use (default: pr-review or $PR_REVIEW_SKILL)
+  --post-comments         Post review comments directly to the PR threads
+  -n, --non-interactive   Execute headlessly without prompts (auto-detected when no TTY)
+  -i, --instructions <tx> Extra instructions or focus areas for the review
+  -h, --help              Show help message
 ```
 
 ---
 
 ## 🔄 Azure DevOps Pipeline Integration
 
-You can execute automated PR reviews directly inside an Azure DevOps pipeline (`azure-pipelines.yml`):
+Run automated PR reviews directly inside `azure-pipelines.yml`:
 
 ```yaml
 trigger: none
@@ -203,9 +172,7 @@ steps:
       -e AZURE_DEVOPS_PAT="$(System.AccessToken)" \
       -e AZURE_DEVOPS_PROJECT="$(System.TeamProject)" \
       -v "$(Build.SourcesDirectory):/workspace" \
-      -v "$(Build.SourcesDirectory)/.agents/skills/pr-review:/home/agyuser/.gemini/config/skills/pr-review:ro" \
-      agy-azuredevops:latest \
-      review-pr $(System.PullRequest.PullRequestId) --post-comments -n
+      reviewer $(System.PullRequest.PullRequestId) --post-comments
   displayName: 'Antigravity Automated PR Review'
   env:
     GEMINI_API_KEY: $(GEMINI_API_KEY)
@@ -214,27 +181,14 @@ steps:
 
 ---
 
-## 🎯 Mounting External Skills & Rules
+## 🎯 Customizing Review Skills & Rules
 
-You can keep your skills, runbooks, and rules in an external repository and mount them into the container:
+Mount custom review skills or rules into the container at runtime:
 
-### 1. Mounting a PR Review Skill
 ```bash
-docker run -it --rm \
+podman run --rm \
   --env-file .env \
   -v "$(pwd):/workspace" \
-  -v "/path/to/my-pr-skill-repo:/home/agyuser/.gemini/config/skills/pr-review:ro" \
-  agy-azuredevops:latest
+  -v "/path/to/my-pr-skill:/home/agyuser/.gemini/config/skills/pr-review:ro" \
+  reviewer 1042
 ```
-
-### 2. Mounting a Multi-Skill Repository
-```bash
-docker run -it --rm \
-  --env-file .env \
-  -v "$(pwd):/workspace" \
-  -v "/path/to/company-skills/skills:/home/agyuser/.gemini/config/skills:ro" \
-  agy-azuredevops:latest
-```
-
-### 3. Mounting Workspace Customizations
-Any `.agents/skills/` or `.agents/rules/` directory inside your target repository will be automatically discovered by `agy`.

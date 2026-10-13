@@ -159,7 +159,7 @@ fi
 # 7. Print Status Banner if Interactive or Informational
 if [ -t 1 ] || [ "${AGY_VERBOSE:-}" = "true" ] || [ "${AGY_VERBOSE:-}" = "1" ]; then
     echo "============================================================"
-    echo " 🚀 Antigravity CLI (agy) Container Ready"
+    echo " 🚀 Antigravity PR Reviewer Container Ready"
     echo "============================================================"
     echo " Workspace:   ${WORKSPACE_DIR}"
     echo " Git Repo:    ${GIT_REPO_PATH}"
@@ -176,4 +176,15 @@ if [ -t 1 ] || [ "${AGY_VERBOSE:-}" = "true" ] || [ "${AGY_VERBOSE:-}" = "1" ]; 
 fi
 
 # 8. Execute Command
+# Default to review-pr if no command given, or if flags/PR_ID passed directly
+if [ "$#" -eq 0 ]; then
+    set -- review-pr
+elif [ "$1" != "review-pr" ]; then
+    case "$1" in
+        -*|[0-9]*)
+            set -- review-pr "$@"
+            ;;
+    esac
+fi
+
 exec "$@"

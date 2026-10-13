@@ -3,7 +3,7 @@
 FROM node:20-bookworm-slim
 
 LABEL maintainer="Antigravity Team"
-LABEL description="Antigravity CLI (agy) environment with Azure DevOps and Git MCP servers for PR workflows"
+LABEL description="Antigravity PR Reviewer with Azure DevOps and Git MCP servers"
 
 # Prevent interactive prompts during installation
 ENV DEBIAN_FRONTEND=noninteractive
@@ -57,14 +57,10 @@ RUN if id node >/dev/null 2>&1; then \
 # Copy scripts
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY bin/review-pr /usr/local/bin/review-pr
-COPY bin/create-pr /usr/local/bin/create-pr
-COPY bin/pr-summary /usr/local/bin/pr-summary
 
-# Make all custom binaries executable
+# Make custom binaries executable
 RUN chmod +x /usr/local/bin/entrypoint.sh \
-    /usr/local/bin/review-pr \
-    /usr/local/bin/create-pr \
-    /usr/local/bin/pr-summary
+    /usr/local/bin/review-pr
 
 # Set working directory to workspace
 WORKDIR ${WORKSPACE_DIR}
@@ -74,4 +70,4 @@ USER agyuser
 
 # Set entrypoint and default command
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
-CMD ["agy"]
+CMD ["review-pr"]

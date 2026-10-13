@@ -1,20 +1,20 @@
 services:
-  agy:
+  reviewer:
     build:
       context: .
       dockerfile: Dockerfile
-    image: agy-azuredevops:latest
-    container_name: agy-ado-agent
+    image: reviewer:latest
+    container_name: pr-reviewer
     env_file:
       - .env
     volumes:
       # Mount current workspace or local repository
       - ./:/workspace
       # Optional: persist agy history and cache across container restarts
-      - agy-home:/home/agyuser
+      - reviewer-home:/home/agyuser
     working_dir: /workspace
     stdin_open: true
     tty: true
 
 volumes:
-  agy-home:
+  reviewer-home:

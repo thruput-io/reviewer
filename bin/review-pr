@@ -6,35 +6,37 @@ set -e
 # Automated Pull Request Review with agy & PR Review Skill
 # ==============================================================================
 
-PR_ID=""
+PR_ID="${PR_ID:-${SYSTEM_PULLREQUEST_PULLREQUESTID:-}}"
 PROJECT="${AZURE_DEVOPS_PROJECT:-${ado_mcp_project:-}}"
 REPO=""
 SKILL_NAME="${PR_REVIEW_SKILL:-pr-review}"
 POST_COMMENTS=false
-NON_INTERACTIVE=false
+NON_INTERACTIVE="${NON_INTERACTIVE:-false}"
 EXTRA_INSTRUCTIONS=""
 
 show_help() {
-    echo "Usage: review-pr <PR_ID> [options]"
+    echo "Usage: review-pr [PR_ID] [options]"
     echo ""
     echo "Arguments:"
-    echo "  <PR_ID>                 Azure DevOps Pull Request ID to review (required)"
+    echo "  [PR_ID]                 Azure DevOps Pull Request ID to review (or set \$PR_ID / \$SYSTEM_PULLREQUEST_PULLREQUESTID)"
     echo ""
     echo "Options:"
     echo "  -p, --project <name>    Azure DevOps Project name (default: \$AZURE_DEVOPS_PROJECT)"
     echo "  -r, --repo <name>       Azure DevOps Repository name"
     echo "  -s, --skill <name>      Skill name to use (default: pr-review or \$PR_REVIEW_SKILL)"
     echo "  --post-comments         Allow the agent to post review comments directly to the PR threads"
-    echo "  --non-interactive, -n   Execute headlessly and print results to stdout (CI/CD mode)"
+    echo "  -n, --non-interactive   Execute headlessly and print results to stdout (CI/CD mode)"
     echo "  -i, --instructions <tx> Extra instructions or focus areas for the review"
     echo "  -h, --help              Show this help message"
     echo ""
-    echo "Example:"
-    echo "  review-pr 1042 --project CoreBanking --post-comments"
+    echo "Examples:"
+    echo "  review-pr 1042"
+    echo "  review-pr 1042 --post-comments"
     echo "  review-pr 1042 -n"
+    echo "  PR_ID=1042 review-pr"
 }
 
-if [ "$#" -eq 0 ]; then
+if [ "$#" -eq 0 ] && [ -z "$PR_ID" ]; then
     show_help
     exit 1
 fi
@@ -84,6 +86,7 @@ done
 
 if [ -z "$PR_ID" ]; then
     echo "Error: Pull Request ID is required." >&2
+    echo "Pass PR ID as an argument (e.g., 'review-pr 1042') or set the PR_ID environment variable." >&2
     exit 1
 fi
 
@@ -108,6 +111,11 @@ if [ -n "$EXTRA_INSTRUCTIONS" ]; then
 
 Additional Instructions:
 ${EXTRA_INSTRUCTIONS}"
+fi
+
+# Auto-detect non-interactive mode if no terminal is attached (prevents TTY errors in containers)
+if [ "$NON_INTERACTIVE" = false ] && [ ! -t 0 ]; then
+    NON_INTERACTIVE=true
 fi
 
 # Execute agy
