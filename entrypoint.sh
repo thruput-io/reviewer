@@ -26,8 +26,6 @@ fi
 
 # 3. Configure Git Environment
 git config --global --add safe.directory "*" || true
-git config --global user.name "Antigravity Reviewer" || true
-git config --global user.email "reviewer@example.com" || true
 
 # 4. Generate Antigravity CLI Settings (settings.json)
 python3 - <<EOF
@@ -42,8 +40,14 @@ with open(settings_path, 'w') as f:
     json.dump(settings, f, indent=2)
 EOF
 
-# 5. Copy Rules and Skills if available
-mkdir -p "${CONFIG_DIR}/rules" "${CONFIG_DIR}/skills"
+# 5. Ensure Skills and Rules are available to agy
+mkdir -p "${CONFIG_DIR}/rules" "${CONFIG_DIR}/skills" "${HOME}/.gemini/skills" "${WORKSPACE_DIR}/.agents/skills"
+
+if [ -d "${HOME}/.agents/skills" ]; then
+    cp -ru "${HOME}/.agents/skills/"* "${CONFIG_DIR}/skills/" 2>/dev/null || true
+    cp -ru "${HOME}/.agents/skills/"* "${HOME}/.gemini/skills/" 2>/dev/null || true
+    cp -ru "${HOME}/.agents/skills/"* "${WORKSPACE_DIR}/.agents/skills/" 2>/dev/null || true
+fi
 
 if [ -d "/etc/antigravity/rules" ]; then
     cp -u /etc/antigravity/rules/* "${CONFIG_DIR}/rules/" 2>/dev/null || true

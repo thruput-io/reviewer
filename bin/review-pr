@@ -29,6 +29,12 @@ fi
 
 export GEMINI_API_KEY="$GEMINI_KEY"
 export AZURE_DEVOPS_PAT="$ADO_PAT"
+export AZURE_DEVOPS_EXT_PAT="$ADO_PAT"
+export ADO_MCP_AUTH_TOKEN="$ADO_PAT"
+
+# Configure Git credentials for Azure DevOps repositories
+B64_PAT=$(printf ":%s" "$ADO_PAT" | base64 | tr -d '\n')
+git config --global http.extraheader "Authorization: Basic $B64_PAT" || true
 
 # Extract organization from URL
 [[ "$PR_URL" =~ dev\.azure\.com/([^/]+) ]] && ORG="${BASH_REMATCH[1]}"
@@ -40,9 +46,23 @@ if [ -z "$ORG" ]; then
     exit 1
 fi
 
-# Write MCP configuration
-mkdir -p ~/.gemini/config
-cat <<EOF > ~/.gemini/config/mcp_config.json
+# Configure Azure CLI defaults if az is available
+if command -v az >/dev/null 2>&1; then
+    az devops configure --defaults organization="https://dev.azure.com/$ORG" 2>/dev/null || true
+fi
+
+# Ensure skill discovery in both global config and workspace directories
+mkdir -p ~/.gemini/config/skills ~/.gemini/skills "${WORKSPACE_DIR:-/workspace}/.agents/skills"
+if [ -d ~/.agents/skills/pr-review ]; then
+    cp -ru ~/.agents/skills/pr-review ~/.gemini/config/skills/ 2>/dev/null || true
+    cp -ru ~/.agents/skills/pr-review ~/.gemini/skills/ 2>/dev/null || true
+    cp -ru ~/.agents/skills/pr-review "${WORKSPACE_DIR:-/workspace}/.agents/skills/" 2>/dev/null || true
+fi
+
+# Write MCP configuration to both config and root gemini paths
+mkdir -p ~/.gemini/config ~/.gemini
+for cfg in ~/.gemini/config/mcp_config.json ~/.gemini/mcp_config.json; do
+cat <<EOF > "$cfg"
 {
   "mcpServers": {
     "azure-devops": {
@@ -59,6 +79,7 @@ cat <<EOF > ~/.gemini/config/mcp_config.json
   }
 }
 EOF
+done
 
 # Build review prompt
 PROMPT="Use the 'pr-review' skill to review Azure DevOps Pull Request: $PR_URL."

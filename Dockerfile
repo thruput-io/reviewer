@@ -25,7 +25,15 @@ RUN pip3 install --no-cache-dir --break-system-packages mcp-server-git
 
 RUN curl -fsSL https://antigravity.google/cli/install.sh | bash -s -- -d /usr/local/bin \
     && chmod +x /usr/local/bin/agy \
+    && ln -s /usr/local/bin/agy /usr/local/bin/gemini \
     && agy --version || true
+
+# Install Azure CLI and Azure DevOps extension required by pr-review skill
+ENV AZURE_EXTENSION_DIR=/opt/azure-cli-extensions
+RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash \
+    && mkdir -p /opt/azure-cli-extensions \
+    && chmod 777 /opt/azure-cli-extensions \
+    && az extension add --name azure-devops
 
 ENV PATH="/usr/local/bin:${AGY_HOME}/.local/bin:${PATH}"
 
@@ -52,7 +60,10 @@ WORKDIR ${WORKSPACE_DIR}
 
 USER agyuser
 
-RUN npx --yes @agentplugins/cli add thruput-io/agents
+# Install pr-review skill via agentplugins and ensure agy discovery paths are linked
+RUN npx --yes @agentplugins/cli add thruput-io/agents \
+    && mkdir -p ${AGY_HOME}/.gemini/config/skills \
+    && cp -ru ${AGY_HOME}/.agents/skills/* ${AGY_HOME}/.gemini/config/skills/ 2>/dev/null || true
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["review-pr"]
