@@ -61,7 +61,7 @@ cat <<EOF > ~/.gemini/config/mcp_config.json
 EOF
 
 # Build review prompt
-PROMPT="Review Pull Request: $PR_URL."
+PROMPT="Use the 'pr-review' skill to review Azure DevOps Pull Request: $PR_URL."
 if [[ "$*" == *"--post-comments"* ]]; then
     PROMPT="$PROMPT Post actionable review comments directly to the PR threads."
 else

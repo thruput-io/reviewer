@@ -2,7 +2,7 @@
 
 A purpose-built container combining Google's **Antigravity CLI (`agy`)**, the **Official Microsoft Azure DevOps MCP Server** (`@azure-devops/mcp`), and the **Git MCP Server** (`mcp-server-git`) to perform automated and interactive pull request reviews in Azure DevOps.
 
-- 🔍 **Automated PR Reviews**: Deep code diff analysis, vulnerability scanning, and review reports.
+- 🔍 **Automated PR Reviews**: Deep code diff analysis, vulnerability scanning, and review reports using the `pr-review` skill from `thruput-io/agents`.
 - 💬 **Thread Comments**: Optionally post actionable review feedback directly to PR threads.
 - 🔗 **Zero Configuration from URL**: Pass the full Azure DevOps PR URL — organization, project, repository, and PR ID are automatically extracted.
 - ⚡ **TTY Auto-Detection**: Automatically runs headlessly in CI/CD without pseudo-terminal errors.

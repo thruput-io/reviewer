@@ -52,5 +52,7 @@ WORKDIR ${WORKSPACE_DIR}
 
 USER agyuser
 
+RUN npx --yes @agentplugins/cli add thruput-io/agents
+
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["review-pr"]
