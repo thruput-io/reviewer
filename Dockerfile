@@ -1,4 +1,4 @@
-FROM node:20-bookworm-slim
+FROM node:26-bookworm-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV AGY_HOME=/home/agyuser
@@ -19,7 +19,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     sudo \
     && rm -rf /var/lib/apt/lists/*
 
-RUN npm install -g @azure-devops/mcp
+RUN npm install -g npm@12 \
+    && npm install -g @azure-devops/mcp
 
 RUN pip3 install --no-cache-dir --break-system-packages mcp-server-git
 
